@@ -133,9 +133,9 @@ td{padding:10px 14px;vertical-align:middle;font-size:13px;}
   <!-- ── HORAS ── -->
   <section class="section active" id="sec-horas">
     <div class="precio-hora-wrap">
-      <label>Precio por hora de trabajo ($):</label>
-      <input type="number" class="inp precio-hora-inp" id="precio-hora" placeholder="0" oninput="savePrecioHora()" value="">
-      <span style="font-size:12px;color:var(--text2)">Se aplica a todos los meses</span>
+      <label>Precio por hora de trabajo ($) — para este mes:</label>
+      <input type="number" class="inp precio-hora-inp" id="precio-hora" placeholder="0" value="">
+      <button class="btn btn-primary" onclick="savePrecioHora()" style="height:32px;padding:0 14px;">Aplicar al mes</button><span style="font-size:12px;color:var(--text2)">Solo aplica al mes seleccionado</span>
     </div>
 
     <div class="mes-selector" id="mes-selector-horas"></div>
@@ -297,9 +297,11 @@ function renderMesSelectors(){
     el.innerHTML=MESES.map(m=>`<button class="mes-btn${m.key===mesSel?' active':''}" onclick="cambiarMes('${m.key}')">${m.label}</button>`).join('');
   });
 }
-function cambiarMes(mes){
+async function cambiarMes(mes){
   mesSel=mes;
   renderMesSelectors();
+  await Promise.all([loadHoras(), loadGrupos()]);
+  loadPrecioHoraDelMes();
   renderHoras();
   renderGrupos();
   renderResumen();
@@ -307,14 +309,30 @@ function cambiarMes(mes){
 
 // ── PRECIO HORA ────────────────────────────────────────────────────────
 let precioHora=0;
-function savePrecioHora(){
-  precioHora=parseInt(document.getElementById('precio-hora').value)||0;
-  localStorage.setItem('vbp_precio_hora',precioHora);
+async function savePrecioHora(){
+  const val=parseFloat(document.getElementById('precio-hora').value)||0;
+  precioHora=val;
+  // Update all rows of current month with new price
+  if(horas.length>0){
+    try{
+      for(const h of horas){
+        await dbPatch('horas_trabajo',h.id,{precio_hora:val});
+        h.precio_hora=val;
+      }
+    }catch(e){showToast('⚠️ Error al actualizar precios','error');}
+  }
   renderHoras();renderResumen();
+  showToast('✅ Precio actualizado para '+MESES.find(m=>m.key===mesSel)?.label,'success');
 }
-function loadPrecioHora(){
-  const v=localStorage.getItem('vbp_precio_hora');
-  if(v){precioHora=parseInt(v);document.getElementById('precio-hora').value=v;}
+function loadPrecioHoraDelMes(){
+  // Load price from first row of current month, or default to 0
+  if(horas.length>0&&horas[0].precio_hora){
+    precioHora=horas[0].precio_hora;
+    document.getElementById('precio-hora').value=precioHora;
+  } else {
+    precioHora=0;
+    document.getElementById('precio-hora').value='';
+  }
 }
 
 // ── HORAS ──────────────────────────────────────────────────────────────
@@ -377,15 +395,15 @@ async function saveHora(){
   if(!fecha){alert('Seleccioná una fecha');return;}
   try{
     if(editHoraId){
-      const saved=await dbPatch('horas_trabajo',editHoraId,{fecha,horas:hs,precio_hora:precioHora,notas});
+      const saved=await dbPatch('horas_trabajo',editHoraId,{fecha,horas:hs,precio_hora:precioHora||0,notas});
       horas=horas.map(h=>h.id===editHoraId?saved:h);
     }else{
-      const saved=await dbPost('horas_trabajo',{fecha,horas:hs,precio_hora:precioHora,notas});
+      const saved=await dbPost('horas_trabajo',{fecha,horas:hs,precio_hora:precioHora||0,notas});
       horas.push(saved);
     }
     closeModal('overlay-hora');renderHoras();renderResumen();
     showToast('✅ Día guardado','success');
-  }catch(e){showToast('❌ Error al guardar','error');}
+  }catch(e){console.error('Save error:',e);showToast('❌ Error al guardar: '+e.message,'error');}
 }
 async function deleteHora(id){
   if(!confirm('¿Eliminar este día?'))return;
@@ -403,7 +421,7 @@ async function generarDiasHabiles(){
     const dia=new Date(fecha+'T00:00:00').getDay();
     if(dia>=1&&dia<=5&&!existentes.has(fecha)){
       try{
-        const saved=await dbPost('horas_trabajo',{fecha,horas:5,precio_hora:precioHora,notas:''});
+        const saved=await dbPost('horas_trabajo',{fecha,horas:5,precio_hora:precioHora||0,notas:''});
         horas.push(saved);agregados++;
       }catch(e){}
     }
@@ -543,9 +561,9 @@ document.getElementById('today-badge').textContent=new Date().toLocaleDateString
 
 // ── INIT ───────────────────────────────────────────────────────────────
 (async function init(){
-  loadPrecioHora();
   renderMesSelectors();
   await Promise.all([loadHoras(), loadGrupos()]);
+  loadPrecioHoraDelMes();
   renderHoras();
   renderGrupos();
 })();
