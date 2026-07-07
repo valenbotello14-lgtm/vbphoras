@@ -237,14 +237,21 @@ td{padding:10px 14px;vertical-align:middle;font-size:13px;}
 
 <!-- MODAL GRUPO -->
 <div class="overlay" id="overlay-grupo" onclick="handleOv(event,'overlay-grupo')">
-  <div class="modal">
+  <div class="modal" style="max-width:600px">
     <h3>🧠 <span id="modal-grupo-title">Nuevo grupo cognitivo</span></h3>
     <div class="form-row">
-      <div class="form-group"><label>Nombre del grupo</label><input type="text" id="g-nombre" placeholder="Ej: Grupo A"></div>
-      <div class="form-group"><label>Horario</label><input type="text" id="g-horario" placeholder="Ej: Lunes 10:00hs"></div>
+      <div class="form-group"><label>Nombre del grupo</label><input type="text" id="g-nombre" placeholder="Ej: Grupo Lunes 15hs"></div>
+      <div class="form-group"><label>Horario</label><input type="text" id="g-horario" placeholder="Ej: Lunes 15:00hs"></div>
     </div>
-    <div class="form-group"><label>Alumnos (separados por coma)</label><textarea id="g-alumnos" placeholder="Juan Pérez, María García, ..."></textarea></div>
-    <div class="form-group"><label>Monto total del grupo ($)</label><input type="number" id="g-monto" placeholder="0"></div>
+    <div class="form-group"><label>Comentario del grupo (opcional)</label><input type="text" id="g-comentario" placeholder="Ej: clase de recuperación, inicio de mes, etc."></div>
+    <div class="form-group">
+      <label>Alumnos y montos</label>
+      <div id="alumnos-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px;"></div>
+      <button type="button" class="btn" style="width:100%;justify-content:center;" onclick="agregarAlumnoFila()">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        Agregar alumno
+      </button>
+    </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('overlay-grupo')">Cancelar</button>
       <button class="btn btn-primary" onclick="saveGrupo()">Guardar</button>
@@ -438,64 +445,120 @@ async function loadGrupos(){
     grupos=data;
   }catch(e){grupos=[];showToast('⚠️ Error al cargar grupos','error');}
 }
+
+function calcMiParteGrupo(g){
+  const alumnos=g.alumnos_data||[];
+  return alumnos.reduce((s,a)=>s+(a.monto||0),0);
+}
+
 function renderGrupos(){
   const list=grupos;
-  const totalBruto=list.reduce((s,g)=>s+(g.monto_total||0),0);
-  const miParte=Math.round(totalBruto*PORCENTAJE);
-  const totalAlumnos=list.reduce((s,g)=>{const al=(g.alumnos||'').split(',').filter(x=>x.trim());return s+al.length;},0);
+  const totalMiParte=list.reduce((s,g)=>s+calcMiParteGrupo(g),0);
+  const totalAlumnos=list.reduce((s,g)=>s+((g.alumnos_data||[]).length),0);
+  const totalBruto=list.reduce((s,g)=>{
+    const al=g.alumnos_data||[];
+    return s+al.reduce((sa,a)=>sa+Math.round((a.monto||0)/0.34),0);
+  },0);
   document.getElementById('cog-grupos').textContent=list.length;
   document.getElementById('cog-total-bruto').textContent=fmtMoney(totalBruto);
-  document.getElementById('cog-mi-parte').textContent=fmtMoney(miParte);
+  document.getElementById('cog-mi-parte').textContent=fmtMoney(totalMiParte);
   document.getElementById('cog-alumnos').textContent=totalAlumnos;
   const container=document.getElementById('grupos-list');
   if(!list.length){container.innerHTML=`<div class="empty">No hay grupos registrados para este mes</div>`;return;}
   container.innerHTML=list.map(g=>{
-    const al=(g.alumnos||'').split(',').filter(x=>x.trim());
-    const miMonto=Math.round((g.monto_total||0)*PORCENTAJE);
+    const alumnos=g.alumnos_data||[];
+    const miMonto=calcMiParteGrupo(g);
     return`<div class="grupo-card">
       <div class="grupo-header">
         <div>
           <div class="grupo-nombre">${g.nombre_grupo}</div>
           <div class="grupo-horario">🕐 ${g.horario||'—'}</div>
+          ${g.comentario?`<div style="font-size:12px;color:var(--yellow);margin-top:3px">💬 ${g.comentario}</div>`:''}
         </div>
         <div style="display:flex;gap:6px">
-          <button class="icon-btn" onclick="openModalGrupo(${g.id})"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+          <button class="icon-btn" onclick="openModalGrupo(${g.id})"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
           <button class="icon-btn del" onclick="deleteGrupo(${g.id})"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
         </div>
       </div>
-      <div class="grupo-alumnos">👥 ${al.length} alumnos: ${al.join(', ')}</div>
-      <div class="grupo-monto">
-        <div><div class="monto-total">Monto total del grupo</div><div style="font-weight:600">${fmtMoney(g.monto_total)}</div></div>
-        <div style="width:1px;height:30px;background:var(--border)"></div>
-        <div><div class="monto-total">Tu parte (34%)</div><div class="monto-yo">${fmtMoney(miMonto)}</div></div>
-      </div>
+      <table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:12px;">
+        <thead><tr>
+          <th style="text-align:left;padding:4px 8px;color:var(--text2);font-weight:600;text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--border)">Alumno</th>
+          <th style="text-align:right;padding:4px 8px;color:var(--text2);font-weight:600;text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--border)">Tu parte</th>
+          <th style="text-align:left;padding:4px 8px;color:var(--text2);font-weight:600;text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--border)">Comentario</th>
+        </tr></thead>
+        <tbody>
+          ${alumnos.map(a=>`<tr>
+            <td style="padding:5px 8px">${a.nombre}</td>
+            <td style="padding:5px 8px;text-align:right;font-family:'Space Grotesk',sans-serif;font-weight:600;color:var(--green)">${fmtMoney(a.monto)}</td>
+            <td style="padding:5px 8px;color:var(--text2);font-style:italic">${a.comentario||''}</td>
+          </tr>`).join('')}
+        </tbody>
+        <tfoot><tr>
+          <td style="padding:6px 8px;font-weight:700;border-top:1px solid var(--border)">TOTAL</td>
+          <td style="padding:6px 8px;text-align:right;font-family:'Space Grotesk',sans-serif;font-weight:700;color:var(--green);border-top:1px solid var(--border)">${fmtMoney(miMonto)}</td>
+          <td style="border-top:1px solid var(--border)"></td>
+        </tr></tfoot>
+      </table>
     </div>`;
   }).join('');
 }
 
 let editGrupoId=null;
+function agregarAlumnoFila(nombre='',monto='',comentario=''){
+  const lista=document.getElementById('alumnos-lista');
+  const div=document.createElement('div');
+  div.style.cssText='display:grid;grid-template-columns:2fr 1fr 2fr auto;gap:8px;align-items:center;';
+  div.innerHTML=`
+    <input type="text" value="${nombre}" placeholder="Nombre del alumno" style="padding:7px 9px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:Inter,sans-serif;font-size:13px;" class="al-nombre">
+    <input type="number" value="${monto}" placeholder="Monto $" style="padding:7px 9px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:Inter,sans-serif;font-size:13px;" class="al-monto">
+    <input type="text" value="${comentario}" placeholder="Comentario (opcional)" style="padding:7px 9px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:Inter,sans-serif;font-size:13px;" class="al-comentario">
+    <button type="button" onclick="this.parentElement.remove()" style="width:28px;height:28px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--red);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;">×</button>
+  `;
+  lista.appendChild(div);
+}
+
 function openModalGrupo(id=null){
   editGrupoId=id;
   document.getElementById('modal-grupo-title').textContent=id?'Editar grupo':'Nuevo grupo cognitivo';
+  document.getElementById('alumnos-lista').innerHTML='';
   if(id){
     const g=grupos.find(x=>x.id===id);
     document.getElementById('g-nombre').value=g.nombre_grupo||'';
     document.getElementById('g-horario').value=g.horario||'';
-    document.getElementById('g-alumnos').value=g.alumnos||'';
-    document.getElementById('g-monto').value=g.monto_total||'';
+    document.getElementById('g-comentario').value=g.comentario||'';
+    const alumnos=g.alumnos_data||[];
+    if(alumnos.length>0){alumnos.forEach(a=>agregarAlumnoFila(a.nombre,a.monto,a.comentario||''));}
+    else{agregarAlumnoFila();}
   }else{
     document.getElementById('g-nombre').value='';
     document.getElementById('g-horario').value='';
-    document.getElementById('g-alumnos').value='';
-    document.getElementById('g-monto').value='';
+    document.getElementById('g-comentario').value='';
+    agregarAlumnoFila();
   }
   document.getElementById('overlay-grupo').classList.add('open');
   setTimeout(()=>document.getElementById('g-nombre').focus(),100);
 }
+
 async function saveGrupo(){
   const nombre=document.getElementById('g-nombre').value.trim();
   if(!nombre){alert('Ingresá el nombre del grupo');return;}
-  const obj={nombre_grupo:nombre,horario:document.getElementById('g-horario').value.trim(),alumnos:document.getElementById('g-alumnos').value.trim(),monto_total:parseInt(document.getElementById('g-monto').value)||0,mes:mesSel};
+  const filas=document.getElementById('alumnos-lista').querySelectorAll('div');
+  const alumnosData=[];
+  filas.forEach(f=>{
+    const n=f.querySelector('.al-nombre').value.trim();
+    const m=parseFloat(f.querySelector('.al-monto').value)||0;
+    const c=f.querySelector('.al-comentario').value.trim();
+    if(n)alumnosData.push({nombre:n,monto:m,comentario:c});
+  });
+  const obj={
+    nombre_grupo:nombre,
+    horario:document.getElementById('g-horario').value.trim(),
+    comentario:document.getElementById('g-comentario').value.trim(),
+    alumnos_data:alumnosData,
+    alumnos:alumnosData.map(a=>a.nombre).join(', '),
+    monto_total:alumnosData.reduce((s,a)=>s+a.monto,0),
+    mes:mesSel
+  };
   try{
     if(editGrupoId){
       const saved=await dbPatch('cognitivo_grupos',editGrupoId,obj);
@@ -508,6 +571,7 @@ async function saveGrupo(){
     showToast('✅ Grupo guardado','success');
   }catch(e){showToast('❌ Error al guardar','error');}
 }
+
 async function deleteGrupo(id){
   if(!confirm('¿Eliminar este grupo?'))return;
   try{await dbDelete('cognitivo_grupos',id);grupos=grupos.filter(g=>g.id!==id);renderGrupos();renderResumen();showToast('✅ Eliminado','success');}
@@ -520,8 +584,7 @@ function renderResumen(){
   document.getElementById('res-mes-nombre').textContent=mesLabel;
   const totalHoras=horas.reduce((s,h)=>s+(h.horas||0),0);
   const ingHoras=totalHoras*precioHora;
-  const totalBrutoCog=grupos.reduce((s,g)=>s+(g.monto_total||0),0);
-  const ingCog=Math.round(totalBrutoCog*PORCENTAJE);
+  const ingCog=grupos.reduce((s,g)=>s+calcMiParteGrupo(g),0);
   const totalFinal=ingHoras+ingCog;
   document.getElementById('res-horas').textContent=totalHoras+'hs';
   document.getElementById('res-ing-horas').textContent=fmtMoney(ingHoras);
@@ -531,8 +594,9 @@ function renderResumen(){
   const rows=[];
   rows.push(`<tr><td style="font-weight:600">⏱ Horas trabajadas</td><td style="color:var(--text2)">${horas.length} días · ${totalHoras}hs · ${fmtMoney(precioHora)}/h</td><td style="font-family:'Space Grotesk',sans-serif;font-weight:700;color:var(--green)">${fmtMoney(ingHoras)}</td></tr>`);
   grupos.forEach(g=>{
-    const mi=Math.round((g.monto_total||0)*PORCENTAJE);
-    rows.push(`<tr><td style="font-weight:600">🧠 ${g.nombre_grupo}</td><td style="color:var(--text2)">Total: ${fmtMoney(g.monto_total)} · Tu 34%</td><td style="font-family:'Space Grotesk',sans-serif;font-weight:700;color:var(--green)">${fmtMoney(mi)}</td></tr>`);
+    const mi=calcMiParteGrupo(g);
+    const al=g.alumnos_data||[];
+    rows.push(`<tr><td style="font-weight:600">🧠 ${g.nombre_grupo}</td><td style="color:var(--text2)">${al.length} alumnos · ${g.horario||''}</td><td style="font-family:'Space Grotesk',sans-serif;font-weight:700;color:var(--green)">${fmtMoney(mi)}</td></tr>`);
   });
   rows.push(`<tr style="border-top:2px solid var(--border2)"><td colspan="2" style="font-weight:700;font-size:15px">TOTAL</td><td style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:18px;color:var(--green)">${fmtMoney(totalFinal)}</td></tr>`);
   tb.innerHTML=rows.join('');
